@@ -1,18 +1,127 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pico 2 W Server</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f9; }
-        h1 { color: #333; }
-        p { color: #666; font-size: 1.2em; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pico W Keypad</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #282c34;
+        color: #f8f8f2;
+        margin: 0;
+    }
+    .container {
+        background-color: #3a3f4b;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    #display {
+        background-color: #1e1e2e;
+        color: #a9b1d6;
+        font-size: 2.5em;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        min-height: 1.5em;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        width: 250px;
+        box-sizing: border-box;
+        border: 1px solid #565f89;
+    }
+    .keypad {
+        display: grid;
+        grid-template-columns: repeat(3, 80px);
+        grid-gap: 10px;
+    }
+    .keypad button {
+        width: 80px;
+        height: 80px;
+        font-size: 1.8em;
+        border: none;
+        border-radius: 8px;
+        background-color: #6272a4;
+        color: #f8f8f2;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        box-shadow: 0 3px #44475a;
+    }
+    .keypad button:active {
+        background-color: #44475a;
+        box-shadow: 0 1px #44475a;
+        transform: translateY(2px);
+    }
+    .keypad button.action-key {
+        background-color: #bd93f9;
+        box-shadow: 0 3px #986fe3;
+    }
+    .keypad button.action-key:active {
+        background-color: #986fe3;
+        box-shadow: 0 1px #986fe3;
+    }
+</style>
 </head>
 <body>
-    <h1>Hello Dad, You Are a Genius!</h1>
-    <h1>Hi Mom, I Love You!</h1>
-    <p>Greetings from your Raspberry Pi Pico.</p>
+<div class="container">
+    <div id="display"></div>
+    <div class="keypad">
+        <button onclick="handleKey('1')">1</button>
+        <button onclick="handleKey('2')">2</button>
+        <button onclick="handleKey('3')">3</button>
+        <button onclick="handleKey('4')">4</button>
+        <button onclick="handleKey('5')">5</button>
+        <button onclick="handleKey('6')">6</button>
+        <button onclick="handleKey('7')">7</button>
+        <button onclick="handleKey('8')">8</button>
+        <button onclick="handleKey('9')">9</button>
+        <button class="action-key" onclick="handleDelete()">DEL</button>
+        <button onclick="handleKey('0')">0</button>
+        <button class="action-key" onclick="handleEnter()">ENT</button>
+    </div>
+</div>
+
+<script>
+    let enteredNumbers = '';
+    const display = document.getElementById('display');
+
+    function updateDisplay() {
+        display.textContent = enteredNumbers;
+    }
+
+    function handleKey(key) {
+        if (enteredNumbers.length < 3) {
+            enteredNumbers += key;
+            updateDisplay();
+        }
+    }
+
+    function handleDelete() {
+        enteredNumbers = enteredNumbers.slice(0, -1);
+        updateDisplay();
+    }
+
+    function handleEnter() {
+        if (enteredNumbers.length > 0) {
+            console.log('Entered code:', enteredNumbers);
+            alert('Code Entered: ' + enteredNumbers);
+            // Here you would typically send this code to the Pico W
+            // using a fetch() or XMLHttpRequest.
+            // Example: fetch('/submit_code?code=' + enteredNumbers);
+            enteredNumbers = ''; // Clear after "entering"
+            updateDisplay();
+        }
+    }
+
+    // Initialize display
+    updateDisplay();
+</script>
 </body>
 </html>
