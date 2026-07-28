@@ -1,127 +1,139 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pico W Keypad</title>
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        background-color: #282c34;
-        color: #f8f8f2;
-        margin: 0;
-    }
-    .container {
-        background-color: #3a3f4b;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    }
-    #display {
-        background-color: #1e1e2e;
-        color: #a9b1d6;
-        font-size: 2.5em;
-        padding: 15px;
-        margin-bottom: 20px;
-        border-radius: 5px;
-        min-height: 1.5em;
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        width: 250px;
-        box-sizing: border-box;
-        border: 1px solid #565f89;
-    }
-    .keypad {
-        display: grid;
-        grid-template-columns: repeat(3, 80px);
-        grid-gap: 10px;
-    }
-    .keypad button {
-        width: 80px;
-        height: 80px;
-        font-size: 1.8em;
-        border: none;
-        border-radius: 8px;
-        background-color: #6272a4;
-        color: #f8f8f2;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-        box-shadow: 0 3px #44475a;
-    }
-    .keypad button:active {
-        background-color: #44475a;
-        box-shadow: 0 1px #44475a;
-        transform: translateY(2px);
-    }
-    .keypad button.action-key {
-        background-color: #bd93f9;
-        box-shadow: 0 3px #986fe3;
-    }
-    .keypad button.action-key:active {
-        background-color: #986fe3;
-        box-shadow: 0 1px #986fe3;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pico W Control</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            touch-action: manipulation; /* Prevents double-tap zoom on mobile */
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        #display {
+            background-color: #333;
+            color: #fff;
+            font-size: 2.5em;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            height: 50px;
+            line-height: 50px;
+            overflow: hidden;
+            position: relative;
+        }
+        #display-text {
+            position: relative;
+            z-index: 2;
+        }
+        /* Flashing animation for the numbers */
+        @keyframes flash {
+            0%, 49.9% { opacity: 1; }
+            50%, 99.9% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .flashing {
+            animation: flash 2s infinite; /* On for 1s, off for 1s */
+        }
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .btn {
+            padding: 20px;
+            font-size: 1.5em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            cursor: pointer;
+            user-select: none; /* Prevents text selection on repeated taps */
+        }
+        .btn:active {
+            background-color: #ddd;
+        }
+        .btn-send {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-clear {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
 </head>
 <body>
+
 <div class="container">
-    <div id="display"></div>
+    <div id="display">
+        <span id="display-text"></span>
+    </div>
     <div class="keypad">
-        <button onclick="handleKey('1')">1</button>
-        <button onclick="handleKey('2')">2</button>
-        <button onclick="handleKey('3')">3</button>
-        <button onclick="handleKey('4')">4</button>
-        <button onclick="handleKey('5')">5</button>
-        <button onclick="handleKey('6')">6</button>
-        <button onclick="handleKey('7')">7</button>
-        <button onclick="handleKey('8')">8</button>
-        <button onclick="handleKey('9')">9</button>
-        <button class="action-key" onclick="handleDelete()">DEL</button>
-        <button onclick="handleKey('0')">0</button>
-        <button class="action-key" onclick="handleEnter()">ENT</button>
+        <div class="btn" onclick="appendNumber('1')">1</div>
+        <div class="btn" onclick="appendNumber('2')">2</div>
+        <div class="btn" onclick="appendNumber('3')">3</div>
+        <div class="btn" onclick="appendNumber('4')">4</div>
+        <div class="btn" onclick="appendNumber('5')">5</div>
+        <div class="btn" onclick="appendNumber('6')">6</div>
+        <div class="btn" onclick="appendNumber('7')">7</div>
+        <div class="btn" onclick="appendNumber('8')">8</div>
+        <div class="btn" onclick="appendNumber('9')">9</div>
+        <div class="btn btn-send" onclick="sendCode()">On</div>
+        <div class="btn" onclick="appendNumber('0')">0</div>
+        <div class="btn btn-clear" onclick="clearDisplay()">Off</div>
     </div>
 </div>
 
 <script>
-    let enteredNumbers = '';
-    const display = document.getElementById('display');
+    const displayText = document.getElementById('display-text');
+    let currentCode = '';
 
-    function updateDisplay() {
-        display.textContent = enteredNumbers;
-    }
-
-    function handleKey(key) {
-        if (enteredNumbers.length < 3) {
-            enteredNumbers += key;
-            updateDisplay();
+    function appendNumber(num) {
+        if (currentCode.length < 3) {
+            currentCode += num;
+            displayText.textContent = currentCode;
         }
     }
 
-    function handleDelete() {
-        enteredNumbers = enteredNumbers.slice(0, -1);
-        updateDisplay();
-    }
-
-    function handleEnter() {
-        if (enteredNumbers.length > 0) {
-            console.log('Entered code:', enteredNumbers);
-            alert('Code Entered: ' + enteredNumbers);
-            // Here you would typically send this code to the Pico W
-            // using a fetch() or XMLHttpRequest.
-            // Example: fetch('/submit_code?code=' + enteredNumbers);
-            enteredNumbers = ''; // Clear after "entering"
-            updateDisplay();
+    function sendCode() {
+        if (currentCode) {
+            // Start flashing the numbers on the screen
+            displayText.classList.add('flashing');
+            // Send the command to the Pico
+            fetch(`/on?code=${currentCode}`)
+                .then(response => response.text())
+                .then(data => console.log(data))
+                .catch(error => console.error('Error:', error));
         }
     }
 
-    // Initialize display
-    updateDisplay();
+    function clearDisplay() {
+        // Clear the number display
+        currentCode = '';
+        displayText.textContent = '';
+        
+        // Stop the visual flashing
+        displayText.classList.remove('flashing');
+
+        // Send the off command to the Pico
+        fetch('/off')
+            .then(response => response.text())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+    }
 </script>
+
 </body>
 </html>
