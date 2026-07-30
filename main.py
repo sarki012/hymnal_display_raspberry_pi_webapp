@@ -43,15 +43,19 @@ def send_clear_top_sequence():
 def start_access_point():
     """Starts a Wi-Fi Access Point."""
     ap = network.WLAN(network.AP_IF)
-    ap.config(essid=AP_SSID, password=AP_PASSWORD)
+    ap.active(False) # Deactivate the interface before configuring
+    # Explicitly set channel and security for better compatibility with mobile devices.
+    ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=6) # security=3 (WPA2-PSK) is default with password
     ap.active(True)
 
     # Wait for the AP to be active
+    print("Waiting for Access Point to activate...")
     while not ap.active():
         time.sleep(1)
 
+    time.sleep(1) # Add a small delay for stability
     ip_address = ap.ifconfig()[0]
-    print(f"Access Point '{AP_SSID}' started.")
+    print(f"Access Point '{AP_SSID}' started on channel 6.")
     print(f"Connect to this network and go to http://{ip_address}")
     return ip_address
 
