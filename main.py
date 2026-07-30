@@ -2,15 +2,23 @@ import machine
 import network
 import socket
 import time
-
 # --- Keypad Protocol Definitions ---
-# These values must match the #define values in the C code for the display controller.
+# These values MUST match the #define values in the C code for the display controller.
+# The original values were incorrect and have been updated to match the C firmware.
 KEYPAD_CODES = {
-    '0': 0x65, '1': 0x5F, '2': 0x63, '3': 0x5E, '4': 0x5D,
-    '5': 0x17, '6': 0x06, '7': 0x33, '8': 0x67, '9': 0x19
+    '0': 0x17, '1': 0x33, '2': 0x67, '3': 0x19, '4': 0x32,
+    '5': 0x65, '6': 0x0C, '7': 0x5F, '8': 0x63, '9': 0x5E
 }
-KEYPAD_ENTER = 0x0C
-KEYPAD_CLEAR = 0x32
+KEYPAD_ENTER = 0x5D
+KEYPAD_CLEAR = 0x06
+
+# --- 7-Segment Display Definitions (from C code) ---
+# These are the bit patterns for each digit on the 7-segment displays.
+SEVEN_SEG_CODES = {
+    '0': 0b00111111, '1': 0b00000110, '2': 0b01011011, '3': 0b01001111, '4': 0b01100110,
+    '5': 0b01101101, '6': 0b01111101, '7': 0b00000111, '8': 0b01111111, '9': 0b01100111
+}
+SEVEN_SEG_BLANK = 0b00000000
 
 # --- UART Configuration ---
 # The C code specifies inverted UART logic.
@@ -29,6 +37,32 @@ def send_key_code(code):
     """Sends a single byte key code over UART."""
     uart.write(bytes([code]))
     time.sleep_ms(50) # Small delay between characters
+
+def send_hymn_to_top(hymn_code_str):
+    """
+    Emulates the C sendToTop() function by building and sending the required 6-byte sequence.
+    The C code sends the contents of PORTA, PORTB, PORTD with bit 7 cleared,
+    then sends them again with bit 7 set. This is a multiplexing/addressing scheme.
+    """
+    print(f"Building and sending sendToTop() sequence for '{hymn_code_str}'...")
+    
+    # Manually pad the code to 3 digits. The 'rjust' method is not available in MicroPython.
+    # We use 'B' as a placeholder for a blank display, which will map to SEVEN_SEG_BLANK.
+    padded_code = ('B' * (3 - len(hymn_code_str))) + hymn_code_str
+
+    # The C code shifts digits right-to-left, so PORTA=digit3, PORTB=digit2, PORTD=digit1.
+    # We map our padded string to the 7-segment values for each port.
+    port_d_val = SEVEN_SEG_CODES.get(padded_code[0], SEVEN_SEG_BLANK) # 1st digit (or blank)
+    port_b_val = SEVEN_SEG_CODES.get(padded_code[1], SEVEN_SEG_BLANK) # 2nd digit (or blank)
+    port_a_val = SEVEN_SEG_CODES.get(padded_code[2], SEVEN_SEG_BLANK) # 3rd digit
+
+    # Build the 6-byte sequence based on the sendToTop() logic
+    # First 3 bytes have bit 7 cleared, next 3 have bit 7 set.
+    sequence = [port_a_val & 0x7F, port_b_val & 0x7F, port_d_val & 0x7F,
+                port_a_val | 0x80, port_b_val | 0x80, port_d_val | 0x80]
+    
+    for code in sequence:
+        send_key_code(code)
 
 def send_clear_top_sequence():
     """
@@ -144,15 +178,14 @@ def serve_webpage(ip):
                             send_clear_top_sequence()
                             timer_active = False # Timer will be restarted below
 
-                        print(f"Received ON command with code: {code_str}.")
-                        print("Sending key codes over UART...")
-                        
-                        # Send the 3 digits one by one
+                        # 1. Send keypad codes to update the BOTTOM display
+                        print(f"Sending keypad codes for '{code_str}' to bottom display...")
                         for digit in code_str:
                             send_key_code(KEYPAD_CODES[digit])
                         
-                        # Send the ENTER command
-                        send_key_code(KEYPAD_ENTER)
+                        # 2. Send the full sequence to update the TOP display (called twice in C code)
+                        send_hymn_to_top(code_str)
+                        send_hymn_to_top(code_str)
 
                         # Start the 7-minute timer
                         print("Starting 7-minute timer.")
