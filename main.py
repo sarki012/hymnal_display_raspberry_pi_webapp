@@ -20,21 +20,17 @@ SEVEN_SEG_CODES = {
 }
 SEVEN_SEG_BLANK = 0b00000000
 
-# --- UART Configurations ---
-# UART0 for receiving from an external source (e.g., a physical keypad)
-# RX=GPIO1 (Pin 2). We will relay this data to UART1.
-uart0 = machine.UART(0, baudrate=9600, rx=machine.Pin(1))
-
-# UART1 for sending to the display controller.
-# The C code for the controller specifies inverted UART logic.
+# --- UART Configuration ---
+# The C code specifies inverted UART logic.
 # UART1: TX=GPIO4 (Pin 6), RX=GPIO5 (Pin 7)
+# We will only use the TX pin.
 uart = machine.UART(1, baudrate=9600, tx=machine.Pin(4), rx=machine.Pin(5), invert=machine.UART.INV_TX | machine.UART.INV_RX)
 
 # Onboard LED for Pico W
 led = machine.Pin("LED", machine.Pin.OUT)
 
 # Access Point Credentials
-AP_SSID = "HymnDisplay"
+AP_SSID = "PicoW_Server"
 AP_PASSWORD = "password123"
 
 def send_key_code(code):
@@ -83,7 +79,8 @@ def start_access_point():
     ap = network.WLAN(network.AP_IF)
     ap.active(False) # Deactivate the interface before configuring
     # Explicitly set channel and security for better compatibility with mobile devices.
-    ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=6) # security=3 (WPA2-PSK) is default with password
+    # security=3 is WPA2-PSK. Explicitly setting this is required for many modern devices.
+    ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=6, security=3)
     ap.active(True)
 
     # Wait for the AP to be active
@@ -148,14 +145,6 @@ def serve_webpage(ip):
                 send_clear_top_sequence()
                 send_clear_top_sequence()
                 timer_active = False # Deactivate timer until a new code is sent
-
-        # --- Step 2: Check for and relay data from physical keypad (UART0) ---
-        if uart0.any():
-            data = uart0.read()
-            if data:
-                print(f"Relaying {len(data)} byte(s) from UART0 to UART1: {data}")
-                uart.write(data)
-                time.sleep_ms(50) # Small delay to match send_key_code
 
         # --- Step 2: Check for incoming web requests (non-blocking) ---
         client = None
