@@ -21,10 +21,14 @@ SEVEN_SEG_CODES = {
 SEVEN_SEG_BLANK = 0b00000000
 
 # --- UART Configuration ---
+# UART0 for receiving from an external source (e.g., a physical keypad)
+# RX=GPIO1 (Pin 2). Inverting RX to match the physical controller's inverted TX.
+uart0 = machine.UART(0, baudrate=9600, rx=machine.Pin(1), invert=machine.UART.INV_RX)
+
 # The C code specifies inverted UART logic.
 # UART1: TX=GPIO4 (Pin 6), RX=GPIO5 (Pin 7)
 # We will only use the TX pin.
-uart = machine.UART(1, baudrate=9600, tx=machine.Pin(4), rx=machine.Pin(5), invert=machine.UART.INV_TX | machine.UART.INV_RX)
+uart1 = machine.UART(1, baudrate=9600, tx=machine.Pin(4), rx=machine.Pin(5), invert=machine.UART.INV_TX | machine.UART.INV_RX)
 
 # Onboard LED for Pico W
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -36,11 +40,11 @@ led = machine.Pin("LED", machine.Pin.OUT)
 # beacon, so the AP broadcasts open regardless. Since the password was never
 # really being enforced, we drop it to avoid the "WEP not secure" prompt and
 # failed WPA2 handshake attempts on phones (e.g. iOS).
-AP_SSID = "PicoW_Server"
+AP_SSID = "Hymn"
 
 def send_key_code(code):
     """Sends a single byte key code over UART."""
-    uart.write(bytes([code]))
+    uart1.write(bytes([code]))
     time.sleep_ms(50) # Small delay between characters
 
 def send_hymn_to_top(hymn_code_str):
@@ -66,8 +70,7 @@ def send_hymn_to_top(hymn_code_str):
     sequence = [port_a_val & 0x7F, port_b_val & 0x7F, port_d_val & 0x7F,
                 port_a_val | 0x80, port_b_val | 0x80, port_d_val | 0x80]
     
-    for code in sequence:
-        send_key_code(code)
+    uart1.write(bytes(sequence))
 
 def send_clear_top_sequence():
     """
@@ -76,8 +79,7 @@ def send_clear_top_sequence():
     """
     print("Sending clearTop() sequence...")
     clear_sequence = [0b00000000, 0b00000000, 0b00000000, 0b10000000, 0b10000000, 0b10000000]
-    for code in clear_sequence:
-        send_key_code(code)
+    uart1.write(bytes(clear_sequence))
 
 def start_access_point():
     """Starts a Wi-Fi Access Point."""
@@ -149,6 +151,14 @@ def serve_webpage(ip):
                 send_clear_top_sequence()
                 send_clear_top_sequence()
                 timer_active = False # Deactivate timer until a new code is sent
+
+        # --- Step 2: Check for and relay data from UART0 to UART1 ---
+        if uart0.any():
+            data = uart0.read()
+            if data:
+                print(f"Relaying {len(data)} byte(s) from UART0 to UART1: {data}")
+                uart1.write(data)
+                time.sleep_ms(50) # Small delay to match send_key_code
 
         # --- Step 2: Check for incoming web requests (non-blocking) ---
         client = None
