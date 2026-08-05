@@ -1,7 +1,8 @@
 import machine
 import network
 import socket
-import time
+import time # Keep for synchronous delays
+import uasyncio as asyncio
 # --- Keypad Protocol Definitions ---
 # These values MUST match the #define values in the C code for the display controller.
 # The original values were incorrect and have been updated to match the C firmware.
@@ -45,7 +46,7 @@ AP_SSID = "Hymn"
 def send_key_code(code):
     """Sends a single byte key code over UART."""
     uart1.write(bytes([code]))
-    time.sleep_ms(50) # Small delay between characters
+    time.sleep_ms(50) # Synchronous sleep is fine for this specific action
 
 def send_hymn_to_top(hymn_code_str):
     """
@@ -115,135 +116,125 @@ def perform_blink_cycle(count):
         time.sleep_ms(blink_delay)
 
 
-def serve_webpage(ip):
-    """Starts the web server and listens for incoming requests."""
-    if not ip:
-        return
+# --- Global State ---
+try:
+    with open("index.html", "r") as f:
+        HTML_CONTENT = f.read()
+except OSError as e:
+    print(f"Fatal Error: Cannot open index.html. {e}")
+    HTML_CONTENT = "<html><body><h1>Error</h1><p>Could not load index.html</p></body></html>"
 
-    # Read the HTML file content once at startup to save memory and improve speed
-    try:
-        with open("index.html", "r") as f:
-            html_content = f.read()
-    except OSError as e:
-        print(f"Error: Cannot open index.html. {e}")
-        return
+SEVEN_MINUTES_MS = 7 * 60 * 1000
+timer_active = False
+timer_task = None
 
-    # Set up TCP socket
-    addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
-    s = socket.socket()
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(addr)
-    s.listen(1)
-    print("Listening on port 80...")
-
-    # --- State variables for 7-minute timer ---
-    SEVEN_MINUTES_MS = 7 * 60 * 1000
+async def manage_seven_minute_timer():
+    """An asyncio task that waits 7 minutes and then clears the display."""
+    global timer_active
+    await asyncio.sleep_ms(SEVEN_MINUTES_MS)
+    print("7-minute timer expired. Clearing top display.")
+    send_clear_top_sequence()
+    send_clear_top_sequence()
     timer_active = False
-    timer_start_time = 0
 
+async def uart_relayer():
+    """A non-blocking task to relay data from UART0 to UART1."""
+    print("UART relayer started.")
+    sreader = asyncio.StreamReader(uart0)
     while True:
-        # --- Step 1: Check and handle the 7-minute timer ---
-        if timer_active:
-            elapsed_time = time.ticks_diff(time.ticks_ms(), timer_start_time)
-            if elapsed_time > SEVEN_MINUTES_MS:
-                print("7-minute timer expired. Clearing top display.")
-                # Per the C code, call clearTop() twice.
-                send_clear_top_sequence()
-                send_clear_top_sequence()
-                timer_active = False # Deactivate timer until a new code is sent
+        # Wait for any data to arrive on UART0
+        data = await sreader.read(1) # Read one byte at a time
+        if data:
+            print(f"Relaying byte from UART0 to UART1: {data}")
+            uart1.write(data)
+            # The 50ms delay is not needed here as it was for debouncing web inputs.
+            # The physical keypad is already debounced by its own firmware.
 
-        # --- Step 2: Check for and relay data from UART0 to UART1 ---
-        if uart0.any():
-            data = uart0.read()
-            if data:
-                print(f"Relaying {len(data)} byte(s) from UART0 to UART1: {data}")
-                uart1.write(data)
-                time.sleep_ms(50) # Small delay to match send_key_code
-
-        # --- Step 2: Check for incoming web requests (non-blocking) ---
-        client = None
-        try:
-            # Set a short timeout so accept() doesn't block forever
-            # A 1-second timeout is reasonable to allow the timer check to run periodically
-            s.settimeout(1.0) 
-            client, addr = s.accept()
-            s.settimeout(None) # Return to blocking mode for client communication
-            print(f"Client connected from {addr}")
-            request = client.recv(1024)
-
-            request_line = request.decode('utf-8').split('\n')[0]
-            
-            # --- Request Routing ---
-            if "GET / " in request_line:
-                client.send('HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n')
-                client.send(html_content)
-            
-            elif "GET /on?code=" in request_line:
-                try:
-                    # Extract the code from "GET /on?code=123 HTTP/1.1"
-                    code_str = request_line.split('code=')[1].split(' ')[0]
-                    
-                    # Validate that the code is 1-3 digits
-                    if 1 <= len(code_str) <= 3 and code_str.isdigit():
-                        # Per C code: if a key is entered while top is displaying, turn off top first.
-                        # `displayState == 1` is equivalent to our `timer_active` being True.
-                        if timer_active:
-                            print("New code entered while timer was active. Clearing top display first.")
-                            send_clear_top_sequence()
-                            send_clear_top_sequence()
-                            timer_active = False # Timer will be restarted below
-
-                        # 1. Send keypad codes to update the BOTTOM display
-                        print(f"Sending keypad codes for '{code_str}' to bottom display...")
-                        for digit in code_str:
-                            send_key_code(KEYPAD_CODES[digit])
-                        
-                        # 2. Send the full sequence to update the TOP display (called twice in C code)
-                        send_hymn_to_top(code_str)
-                        send_hymn_to_top(code_str)
-
-                        # Start the 7-minute timer
-                        print("Starting 7-minute timer.")
-                        timer_active = True
-                        timer_start_time = time.ticks_ms()
-                        
-                        client.send('HTTP/1.0 200 OK\r\n\r\n')
-                        client.send(f"OK: Sent code {code_str} to display.")
-                    else:
-                        client.send('HTTP/1.0 400 Bad Request\r\n\r\n')
-                        client.send("Error: Code must be 1 to 3 digits.")
-                except (ValueError, IndexError):
-                    client.send('HTTP/1.0 400 Bad Request\r\n\r\n')
-                    client.send("Error: Invalid code format.")
-
-            elif "GET /off" in request_line:
-                print("Received OFF command. Stopping timer and clearing display.")
-                # Per C code: if CLEAR is received while top is displaying, clear the top.
-                if timer_active:
-                    send_clear_top_sequence()
-                    send_clear_top_sequence()
-
-                # Deactivate the timer and send the standard KEYPAD_CLEAR for the bottom display.
-                timer_active = False
-                send_key_code(KEYPAD_CLEAR)
-                client.send('HTTP/1.0 200 OK\r\n\r\n')
-                client.send("OK: Sent CLEAR command.")
-
-            else:
-                client.send('HTTP/1.0 404 Not Found\r\n\r\n')
-                client.send("Not Found")
-
-        except OSError as e:
-            # This will trigger on timeout, which is normal. We just ignore it.
+async def handle_web_request(reader, writer):
+    """Handles a single incoming web request."""
+    global timer_active, timer_task
+    
+    try:
+        request_line = await reader.readline()
+        # Read and discard headers
+        while await reader.readline() != b"\r\n":
             pass
 
-        except Exception as e:
-            print(f"Error: {e}")
+        request_str = request_line.decode('utf-8')
+        addr = writer.get_extra_info('peername')
+        print(f"Client connected from {addr}, request: {request_str.strip()}")
 
-        finally:
-            if client:
-                client.close()
+        writer.write('HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n')
 
-# Execute Workflow
-ip = start_access_point()
-serve_webpage(ip)
+        if "GET / " in request_str:
+            await writer.awrite(HTML_CONTENT)
+        
+        elif "GET /on?code=" in request_str:
+            try:
+                code_str = request_str.split('code=')[1].split(' ')[0]
+                if 1 <= len(code_str) <= 3 and code_str.isdigit():
+                    if timer_active and timer_task:
+                        print("New code entered while timer was active. Clearing top display first.")
+                        timer_task.cancel()
+                        send_clear_top_sequence()
+                        send_clear_top_sequence()
+
+                    print(f"Sending keypad codes for '{code_str}' to bottom display...")
+                    for digit in code_str:
+                        send_key_code(KEYPAD_CODES[digit])
+                    
+                    send_hymn_to_top(code_str)
+                    send_hymn_to_top(code_str)
+
+                    print("Starting 7-minute timer.")
+                    timer_active = True
+                    timer_task = asyncio.create_task(manage_seven_minute_timer())
+                    
+                    await writer.awrite(f"OK: Sent code {code_str} to display.")
+                else:
+                    await writer.awrite("Error: Code must be 1 to 3 digits.")
+            except (ValueError, IndexError):
+                await writer.awrite("Error: Invalid code format.")
+
+        elif "GET /off" in request_str:
+            print("Received OFF command. Stopping timer and clearing display.")
+            if timer_active and timer_task:
+                timer_task.cancel()
+                send_clear_top_sequence()
+                send_clear_top_sequence()
+
+            timer_active = False
+            send_key_code(KEYPAD_CLEAR)
+            await writer.awrite("OK: Sent CLEAR command.")
+
+        else:
+            writer.write('HTTP/1.0 404 Not Found\r\n\r\n')
+            await writer.awrite("Not Found")
+
+    except Exception as e:
+        print(f"Error handling web request: {e}")
+    finally:
+        await writer.aclose()
+
+async def main():
+    """Main asynchronous function to set up and run all tasks."""
+    ip = start_access_point()
+    if not ip:
+        print("Failed to start Access Point. Halting.")
+        return
+
+    print("Starting web server...")
+    # Start the UART relayer task
+    asyncio.create_task(uart_relayer())
+    # Start the web server
+    await asyncio.start_server(handle_web_request, '0.0.0.0', 80)
+    
+    # Keep the main task running forever
+    while True:
+        await asyncio.sleep(10)
+
+# --- Execute Workflow ---
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    print("Program stopped.")
