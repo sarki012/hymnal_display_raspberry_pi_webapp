@@ -30,8 +30,13 @@ uart = machine.UART(1, baudrate=9600, tx=machine.Pin(4), rx=machine.Pin(5), inve
 led = machine.Pin("LED", machine.Pin.OUT)
 
 # Access Point Credentials
+# NOTE: Intentionally open (no password). MicroPython's cyw43 AP driver has a
+# known unfixed bug (github.com/orgs/micropython/discussions/17059) where
+# security=WPA2 is accepted by config() but never applied to the actual
+# beacon, so the AP broadcasts open regardless. Since the password was never
+# really being enforced, we drop it to avoid the "WEP not secure" prompt and
+# failed WPA2 handshake attempts on phones (e.g. iOS).
 AP_SSID = "PicoW_Server"
-AP_PASSWORD = "password123"
 
 def send_key_code(code):
     """Sends a single byte key code over UART."""
@@ -78,9 +83,8 @@ def start_access_point():
     """Starts a Wi-Fi Access Point."""
     ap = network.WLAN(network.AP_IF)
     ap.active(False) # Deactivate the interface before configuring
-    # Explicitly set channel and security for better compatibility with mobile devices.
-    # security=3 is WPA2-PSK. Explicitly setting this is required for many modern devices.
-    ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=6, security=3)
+    # security=0 is open (no password). See AP_SSID comment above for why.
+    ap.config(essid=AP_SSID, channel=6, security=0)
     ap.active(True)
 
     # Wait for the AP to be active
