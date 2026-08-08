@@ -56,9 +56,12 @@ def send_hymn_to_top(hymn_code_str):
     """
     print(f"Building and sending sendToTop() sequence for '{hymn_code_str}'...")
     
+    # Convert to int and back to string to strip leading zeros (e.g., "025" becomes "25").
+    # This will cause the padding logic to treat them as blanks.
+    code_without_leading_zeros = str(int(hymn_code_str))
     # Manually pad the code to 3 digits. The 'rjust' method is not available in MicroPython.
     # We use 'B' as a placeholder for a blank display, which will map to SEVEN_SEG_BLANK.
-    padded_code = ('B' * (3 - len(hymn_code_str))) + hymn_code_str
+    padded_code = ('B' * (3 - len(code_without_leading_zeros))) + code_without_leading_zeros
 
     # The C code shifts digits right-to-left, so PORTA=digit3, PORTB=digit2, PORTD=digit1.
     # We map our padded string to the 7-segment values for each port.
