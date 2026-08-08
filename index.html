@@ -28,11 +28,14 @@
             font-size: 2.5em;
             padding: 15px;
             border-radius: 5px;
-            margin-bottom: 20px;
-            height: 50px;
-            line-height: 50px;
+            margin: 0 0 20px 0; /* top, right, bottom, left */
             overflow: hidden;
             position: relative;
+            /* Add flexbox for robust centering */
+            display: flex;
+            align-items: center; /* Vertical centering */
+            justify-content: flex-end; /* Right-align content */
+            height: 80px; /* Set a fixed height */
         }
         #display-text {
             position: relative;
@@ -105,20 +108,19 @@
         if (currentCode.length >= 3) {
             return;
         }
-
-        // Append the new number and then convert to an integer and back to a string.
-        // This strips any leading zeros, e.g., "0" + "2" -> "02" -> 2 -> "2".
-        // The only time a "0" will remain is if it's the only digit.
-        currentCode = String(parseInt(currentCode + num, 10));
+        // Simply append the number. CSS will handle the alignment.
+        currentCode += num;
         displayText.textContent = currentCode;
     }
 
     function sendCode() {
-        if (currentCode) {
+        // Trim spaces before sending so "  1" becomes "1"
+        const codeToSend = currentCode.trim();
+        if (codeToSend) {
             // Start flashing the numbers on the screen
             displayText.classList.add('flashing');
             // Send the command to the Pico
-            fetch(`/on?code=${currentCode}`)
+            fetch(`/on?code=${codeToSend}`)
                 .then(response => response.text())
                 .then(data => console.log(data))
                 .catch(error => console.error('Error:', error));
