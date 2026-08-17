@@ -90,7 +90,7 @@ def start_access_point():
     ap = network.WLAN(network.AP_IF)
     ap.active(False) # Deactivate the interface before configuring
     # security=0 is open (no password). See AP_SSID comment above for why.
-    ap.config(essid=AP_SSID, channel=11, security=0, hidden=True)
+    ap.config(essid=AP_SSID, channel=6, security=0, hidden=True)
     ap.active(True)
 
     # Wait for the AP to be active
@@ -100,7 +100,7 @@ def start_access_point():
 
     time.sleep(1) # Add a small delay for stability
     ip_address = ap.ifconfig()[0]
-    print(f"Hidden Access Point '{AP_SSID}' started on channel 11.")
+    print(f"Hidden Access Point '{AP_SSID}' started on channel 6.")
     print(f"Manually connect to the hidden network '{AP_SSID}' and go to http://{ip_address}")
     return ip_address
 
